@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env/
+.env.*
+
+# macOS / Linux
+.DS_Store
+
+# Logs
+*.log
+
+# IDE/Editor configs
+.vscode/
+.idea/
+
+# Python egg
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Secret config
+*.pem
+*.key
+*.crt
+*.p12
+*.json  # <-- if you’re using service_account.json for Google APIs
+
+# Jupyter (if ever used)
+.ipynb_checkpoints/
+
+# Node stuff (in case of hybrid project)
+node_modules/
+
+# OS junk
+Thumbs.db
+
+# Deployment configs (optional)
+Procfile
+Dockerfile
