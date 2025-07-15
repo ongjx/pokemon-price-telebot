@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 from bs4 import BeautifulSoup
 from telegram import Update
@@ -9,10 +10,8 @@ from telegram.ext import (
     filters
 )
 import asyncio
-import time
 import nest_asyncio
 
-# Load the Telegram bot token
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 def get_card_name_from_tcg_republic(series: str, serial: str):
@@ -111,9 +110,9 @@ async def main():
 
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("[INFO] Bot started.")
+    print("[INFO] Bot is running...")
     await app.run_polling()
 
 if __name__ == "__main__":
-    nest_asyncio.apply()  # allows us to re-use event loop on Render
+    nest_asyncio.apply()
     asyncio.get_event_loop().run_until_complete(main())
