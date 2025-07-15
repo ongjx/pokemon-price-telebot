@@ -111,7 +111,7 @@ def handle_message(update, context):
         names.append(name)
         prices.append(price)
 
-    update.message.reply_text("\n\n".join(names + prices))
+    update.message.reply_text("\n".join(names + prices))
 
 
 def main():
