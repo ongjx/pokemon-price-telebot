@@ -1,8 +1,8 @@
 services:
   - type: worker
     name: telegram-bot
+    dockerfilePath: ./Dockerfile
+    plan: free
     envVars:
       - key: TELEGRAM_TOKEN
         sync: false
-    plan: free
-    dockerfilePath: ./Dockerfile
