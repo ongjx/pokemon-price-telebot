@@ -1,42 +1,13 @@
+import os
 import requests
 from bs4 import BeautifulSoup
-from telegram.ext import Updater, MessageHandler, Filters
-import os
-# Replace with your bot token
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+import asyncio
+import time
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-
-def get_ungraded_price(card_query: str) -> str:
-    try:
-        print(f"[INFO] Fetching: {card_query}")
-        base_url = "https://www.pricecharting.com/search-products"
-        params = {"q": card_query, "type": "prices"}
-        session = requests.Session()
-        response = session.get(base_url, params=params, allow_redirects=True)
-
-        if response.status_code != 200:
-            print(f"[ERROR] HTTP {response.status_code} for '{card_query}'")
-            return "-"
-
-        soup = BeautifulSoup(response.text, 'html.parser')
-        full_prices_div = soup.find('div', {'id': 'full-prices'})
-        if not full_prices_div:
-            print(f"[WARN] No full-prices section found for '{card_query}'")
-            return "-"
-
-        rows = full_prices_div.find_all('tr')
-        for row in rows:
-            cols = row.find_all('td')
-            if len(cols) >= 2 and "Ungraded" in cols[0].text:
-                price = cols[1].text.strip()
-                print(f"[SUCCESS] {card_query} → {price}")
-                return price
-
-        print(f"[WARN] Ungraded price not found for '{card_query}'")
-        return "-"
-    except Exception as e:
-        print(f"[EXCEPTION] Error while fetching '{card_query}': {e}")
-        return "-"
 
 def get_card_name_from_tcg_republic(series: str, serial: str):
     try:
@@ -46,53 +17,69 @@ def get_card_name_from_tcg_republic(series: str, serial: str):
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
-            print(f"[ERROR] HTTP {response.status_code} for {series} {serial}")
+            print(f"[ERROR] HTTP {response.status_code}")
             return "-", "-"
 
         soup = BeautifulSoup(response.text, 'html.parser')
         img_tags = soup.select('.product_thumbnail_image img')
 
-        if len(img_tags) == 0:
-            print(f"[WARN] No image found for {series} {serial}")
-            return "-", "-"
-        elif len(img_tags) > 1:
-            print(f"[WARN] Multiple images found for {series} {serial}")
+        if len(img_tags) != 1:
+            print(f"[WARN] Expected 1 result, got {len(img_tags)}")
             return "-", "-"
 
         alt_text = img_tags[0].get('alt', '').strip()
-        if not alt_text:
-            print(f"[WARN] Image found but no alt text for {series} {serial}")
-            return "-", "-"
-
-        # Example: "Spiritomb 076/071 AR Foil"
-        name_part = alt_text.split('/')[0].strip()  # "Spiritomb 076"
+        name_part = alt_text.split('/')[0].strip()  # e.g. "Spiritomb 076"
         name_tokens = name_part.split()
         if not name_tokens:
             return "-", "-"
-
         *name_words, number = name_tokens
-        name_clean = " ".join(name_words)             # "Spiritomb"
-        query = f"{name_clean} #{int(number)}"        # "Spiritomb #76"
+        name_clean = " ".join(name_words)  # "Spiritomb"
+        query = f"{name_clean} #{int(number)}"  # "Spiritomb #76"
         return name_clean, query
-
     except Exception as e:
-        print(f"[EXCEPTION] Error parsing TCGRepublic for {series} {serial}: {e}")
+        print(f"[EXCEPTION] Error parsing TCGRepublic: {e}")
         return "-", "-"
 
 
+def get_ungraded_price(card_query: str) -> str:
+    try:
+        print(f"[INFO] Fetching price for: {card_query}")
+        base_url = "https://www.pricecharting.com/search-products"
+        params = {"q": card_query, "type": "prices"}
+        session = requests.Session()
+        response = session.get(base_url, params=params, allow_redirects=True)
 
-def handle_message(update, context):
-    raw_text = update.message.text.strip()
-    print(f"[RECEIVED] {raw_text}")
+        if response.status_code != 200:
+            return "-"
 
-    lines = [line.strip() for line in raw_text.replace(',', '\n').split('\n') if line.strip()]
+        soup = BeautifulSoup(response.text, 'html.parser')
+        full_prices_div = soup.find('div', {'id': 'full-prices'})
+        if not full_prices_div:
+            return "-"
+
+        rows = full_prices_div.find_all('tr')
+        for row in rows:
+            cols = row.find_all('td')
+            if len(cols) >= 2 and "Ungraded" in cols[0].text:
+                return cols[1].text.strip()
+
+        return "-"
+    except Exception as e:
+        print(f"[ERROR] Failed to get price for {card_query}: {e}")
+        return "-"
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    print(f"[RECEIVED] {text}")
+    lines = [line.strip() for line in text.replace(',', '\n').split('\n') if line.strip()]
+
     names = []
     prices = []
 
     for line in lines:
         parts = line.split()
         if "#" in line:
-            # e.g., "Blaziken V #18"
             name = line.rsplit('#', 1)[0].strip()
             query = line
         elif len(parts) == 2:
@@ -107,19 +94,33 @@ def handle_message(update, context):
             prices.append("-")
             continue
 
-        price = get_ungraded_price(query)
         names.append(name)
-        prices.append(price)
+        prices.append(get_ungraded_price(query))
+        time.sleep(0.5)
 
-    update.message.reply_text("\n\n".join(names + prices))
+    result = "\n".join(names + prices)
+    await update.message.reply_text(result)
 
 
-def main():
-    updater = Updater(TELEGRAM_TOKEN, use_context=True)
-    dp = updater.dispatcher
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    updater.start_polling()
-    updater.idle()
+async def main():
+    if not TELEGRAM_TOKEN:
+        raise ValueError("Missing TELEGRAM_TOKEN in environment variables.")
+
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    print("[INFO] Bot is running...")
+    await app.run_polling()
+
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
+    except RuntimeError:
+        # If event loop is already running (e.g., on Render), use this fallback
+        import nest_asyncio
+        nest_asyncio.apply()
+        asyncio.get_event_loop().run_until_complete(main())
