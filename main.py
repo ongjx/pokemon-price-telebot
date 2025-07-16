@@ -113,8 +113,25 @@ def handle_message(update, context):
 
     update.message.reply_text("\n".join(names + prices))
 
+# Add this at the top
+from threading import Thread
+from flask import Flask
+import os
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return "Bot is alive!"
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
 
 def main():
+    # Start dummy web server for Render
+    Thread(target=run_web_server).start()
+
     updater = Updater(TELEGRAM_TOKEN, use_context=True)
     dp = updater.dispatcher
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
